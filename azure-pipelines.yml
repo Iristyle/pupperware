@@ -4,6 +4,9 @@ pool:
   # includes Ruby 2.5, Go 1.10, Node.js 10.10, hadolint
   name: Default
 
+variables:
+  BUILD_REPOSITORY: 127.0.0.1
+
 steps:
 - checkout: self  # self represents the repo where the initial Pipelines YAML file was found
   clean: true  # whether to fetch clean each time
@@ -43,3 +46,32 @@ steps:
     Get-ChildItem Env: | % { Write-Host "$($_.Key): $($_.Value)"  }
   displayName: Diagnostic Host Information
   name: hostinfo
+- powershell: |
+    bundle install --with test --path '.bundle/gems'
+    # heavy handed approach to use the correct compose file
+    Copy-Item ./docker-compose.azure.yml ./docker-compose.yml -Force
+    # . ./docker/ci/build.ps1
+    # Invoke-ContainerBuildSetup
+  displayName: Prepare Test Environment
+  name: test_prepare
+- powershell: |
+    echo "PUPPETDB_HOST=$(puppetdb_host)" | Out-File '.env' -Append
+    echo "PUPPETDB_USER=$(puppetdb_user)" | Out-File '.env' -Append
+    echo "PUPPETDB_PASSWORD=$(puppetdb_password)" | Out-File '.env' -Append
+    Get-Content -Path '.env'
+    bundle exec rspec spec
+    # . ./docker/ci/build.ps1
+    # Invoke-ContainerTest -Name pupperware -Repository $ENV:BUILD_REPOSITORY
+  displayName: Test pupperware
+  name: test_pupperware
+- task: PublishTestResults@2
+  displayName: Publish pupperware test results
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: '/TEST-rspec.xml'
+    testRunTitle: pupperware Test Results
+- powershell: |
+    docker container prune --force
+    docker image prune --filter "dangling=true" --force
+  displayName: Container Cleanup
+  condition: always()
