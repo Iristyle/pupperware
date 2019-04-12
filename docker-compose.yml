@@ -18,10 +18,6 @@ services:
       - ${VOLUME_ROOT:-.}/volumes/code:/etc/puppetlabs/code/
       - ${VOLUME_ROOT:-.}/volumes/puppet:/etc/puppetlabs/puppet/
       - ${VOLUME_ROOT:-.}/volumes/serverdata:/opt/puppetlabs/server/data/puppetserver/
-    networks:
-      default:
-        aliases:
-         - puppet.${AZURE_DOMAIN:-}
 
   postgres:
     image: postgres:9.6
