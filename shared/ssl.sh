@@ -87,7 +87,7 @@ httpsreq_insecure() {
 }
 
 master_running() {
-    test "$(httpsreq_insecure "GET /status/v1/simple HTTP/1.0")" = "running"
+    test "$(httpsreq_insecure "GET /status/v1/simple HTTP/1.0\n${HOSTHEADER}")" = "running"
 }
 
 ### Verify dependencies available
@@ -120,6 +120,7 @@ ALTNAMEFILE="/tmp/altnames.conf"
 CA="/puppet-ca/v1"
 CERTSUBJECT="/CN=${CERTNAME}"
 CERTHEADER="-----BEGIN CERTIFICATE-----"
+HOSTHEADER="Host: ${PUPPETSERVER_HOSTNAME}"
 
 ### Handle certificate extensions
 # NOTE If we want to expand support for more extensions, it would be better
@@ -170,21 +171,21 @@ done
 
 ### Get the CA certificate for use with subsequent requests
 ### Fail-fast if openssl errors connecting or the CA certificate can't be parsed
-if ! httpsreq_insecure "GET ${CA}/certificate/ca HTTP/1.0" > "${CACERTFILE}"; then
+if ! httpsreq_insecure "GET ${CA}/certificate/ca HTTP/1.0\n${HOSTHEADER}" > "${CACERTFILE}"; then
     error "cannot reach CA host '${PUPPETSERVER_HOSTNAME}'"
 elif ! openssl x509 -subject -issuer -noout -in "${CACERTFILE}"; then
     error "invalid CA certificate"
 fi
 
 ### Get the CRL from the CA for use with client-side validation
-if ! httpsreq "GET ${CA}/certificate_revocation_list/ca HTTP/1.0" > "${CRLFILE}"; then
+if ! httpsreq "GET ${CA}/certificate_revocation_list/ca HTTP/1.0\n${HOSTHEADER}" > "${CRLFILE}"; then
     error "cannot reach CRL host '${PUPPETSERVER_HOSTNAME}'"
 elif ! openssl crl -text -noout -in "${CRLFILE}" > /dev/null; then
     error "invalid CRL"
 fi
 
 ### Check the CA does not already have a signed certificate for this host
-CERTREQ="GET ${CA}/certificate/${CERTNAME} HTTP/1.0"
+CERTREQ="GET ${CA}/certificate/${CERTNAME} HTTP/1.0\n${HOSTHEADER}"
 if httpsreq "$CERTREQ" >/dev/null; then
     error "CA already has signed certificate for '${CERTNAME}'"
 fi
@@ -202,6 +203,7 @@ openssl req -new -key "${PRIVKEYFILE}" -out "${CSRFILE}" -subj "${CERTSUBJECT}" 
 ### Submit CSR and fail gracefully on certain error conditions
 CSRREQ=$(cat <<EOF
 PUT ${CA}/certificate_request/${CERTNAME} HTTP/1.0
+${HOSTHEADER}
 Content-Length: $(wc -c < "${CSRFILE}")
 Content-Type: text/plain
 
